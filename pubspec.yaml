@@ -23,10 +23,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  font_awesome_flutter: ^9.0.0
-  path_provider: ^2.0.2
-  hive_flutter: ^1.1.0
-  hive: ^2.0.4
+  font_awesome_flutter: any
+  path_provider: any
+  hive_flutter: any
+  hive: any
   flutter_gradients: any
   form_field_validator: any
   icons_helper: any
@@ -42,7 +42,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_launcher_icons: ^0.9.0
+  flutter_launcher_icons: any
 
 flutter_icons:
   android: "launcher_icon"
