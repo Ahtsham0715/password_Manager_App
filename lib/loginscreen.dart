@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_gradients/flutter_gradients.dart';
 import 'package:password_manager/password.dart';
@@ -7,6 +9,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:crypto/crypto.dart';
 import 'package:mailer2/mailer.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -21,14 +25,136 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool submitValid = false;
 
+  final LocalAuthentication auth = LocalAuthentication();
+  bool _canCheckBiometrics = false;
+  List<BiometricType> _availableBiometrics;
+  String _authorized = 'Not Authorized';
+  bool _isAuthenticating = false;
+
   @override
   void initState() {
     super.initState();
     usersbox = Hive.box("users");
     passwords = Hive.box("passwords");
+    _checkBiometrics();
+  }
+
+  Future<void> _checkBiometrics() async {
+    bool canCheckBiometrics;
+    try {
+      canCheckBiometrics = await auth.canCheckBiometrics;
+    } on PlatformException catch (e) {
+      canCheckBiometrics = false;
+      print(e);
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _canCheckBiometrics = canCheckBiometrics;
+    });
+  }
+
+  Future<void> _getAvailableBiometrics() async {
+    List<BiometricType> availableBiometrics;
+    try {
+      availableBiometrics = await auth.getAvailableBiometrics();
+    } on PlatformException catch (e) {
+      availableBiometrics = <BiometricType>[];
+      print(e);
+    }
+    if (!mounted) return;
+
+    setState(() {
+      _availableBiometrics = availableBiometrics;
+      print(_availableBiometrics);
+    });
+  }
+
+  Future<void> _authenticate() async {
+    bool authenticated = false;
+    try {
+      setState(() {
+        _isAuthenticating = true;
+        _authorized = 'Authenticating';
+      });
+      authenticated = await auth.authenticate(
+          localizedReason: 'Let OS determine authentication method',
+          options: AuthenticationOptions(
+             useErrorDialogs: true,
+          stickyAuth: true
+          ),
+         );
+      setState(() {
+        _isAuthenticating = false;
+      });
+    } on PlatformException catch (e) {
+      print(e);
+      setState(() {
+        _isAuthenticating = false;
+        _authorized = "Error - ${e.message}";
+      });
+      return;
+    }
+    if (!mounted) return;
+
+    setState(
+        () => _authorized = authenticated ? 'Authorized' : 'Not Authorized');
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    bool authenticated = false;
+    try {
+      setState(() {
+        _isAuthenticating = true;
+        _authorized = 'Authenticating';
+      });
+      authenticated = await auth.authenticate(
+          localizedReason: 'Scan your fingerprint to authenticate',
+          options: AuthenticationOptions(
+            useErrorDialogs: true,
+          stickyAuth: true,
+          biometricOnly: true
+          )
+          );
+      setState(() {
+        _isAuthenticating = false;
+        _authorized = 'Authenticating';
+      });
+    } on PlatformException catch (e) {
+      print(e);
+      setState(() {
+        _isAuthenticating = false;
+        _authorized = "Error - ${e.message}";
+        print(_authorized);
+        // Navigator.of(context).pushReplacement(MaterialPageRoute(
+        //     builder: (BuildContext context) =>
+        //         passwordspage(usersbox.getAt(0))));
+      });
+      return;
+    }
+    if (!mounted) return;
+
+    final String message = authenticated ? 'Authorized' : 'Not Authorized';
+    setState(() {
+      _authorized = message;
+      print(message);
+      if (_authorized == 'Authorized') {
+        if (usersbox.keys.toList().length != 0) {
+          Navigator.of(context).pushReplacement(MaterialPageRoute(
+              builder: (BuildContext context) =>
+                  passwordspage(usersbox.keyAt(0))));
+        } else {
+          showDialog(
+              context: context,
+              builder: (_) => customerrordialog("Account doesn't exist"));
+          // _authenticateWithBiometrics();
+        }
+      }
+    });
   }
 
   final _loginkey = GlobalKey<FormState>();
+  final _emailkey = GlobalKey<FormState>();
 
   TextEditingController enteredusername = new TextEditingController();
   TextEditingController enteredpassword = new TextEditingController();
@@ -37,18 +163,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
   var otp;
 
-  void customsnackbar(texttodisplay){
+  void customsnackbar(texttodisplay) {
     ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    texttodisplay,
-                    style: TextStyle(
-                      fontSize: 20.0,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              );
+      SnackBar(
+        content: Text(
+          texttodisplay,
+          style: TextStyle(
+            fontSize: 20.0,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
   }
 
   void hashfunction(data) {
@@ -62,11 +188,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (otp.toString() == _otpcontroller.text) {
       _emailcontroller.clear();
       _otpcontroller.clear();
-      otp = 0;
       Navigator.pop(context);
-       Navigator.of(context).push(MaterialPageRoute(
-                        builder: (BuildContext context) => ResetPassword(),
-                      ));
+      otp = 0;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (BuildContext context) => ResetPassword(),
+      ));
     } else {
       customsnackbar("Invalid OTP...Try again");
     }
@@ -74,38 +200,42 @@ class _LoginScreenState extends State<LoginScreen> {
 
   ///a void funtion to send the OTP to the user
   void sendOtp() async {
-    otp = Random().nextInt(99999 - 13333);
-    var options = new GmailSmtpOptions()
-      ..username = 'mymanager1123@gmail.com'
-      ..password = 'bhakkar43';
-    var emailTransport = new SmtpTransport(options);
+    if (_emailkey.currentState.validate()) {
+      otp = Random().nextInt(99999 - 13333);
+      var options = new GmailSmtpOptions()
+        ..username = 'mymanager1123@gmail.com'
+        ..password = 'bhakkar43';
+      var emailTransport = new SmtpTransport(options);
 
-    // Create our mail/envelope.
-    var envelope = new Envelope()
-      ..from = 'mymanager1123@gmail.com'
-      ..recipients.add(usersbox.get('user_email').toString())
-      ..subject = 'Password reset verification'
-      ..text =
-          'This email is in the reponse of your reset password request in our password manager app. please verify the given OTP\n\n $otp';
+      // Create our mail/envelope.
+      var envelope = new Envelope()
+        ..from = 'mymanager1123@gmail.com'
+        ..recipients.add(_emailcontroller.text)
+        ..subject = 'Password reset verification'
+        ..text =
+            'This email is in the reponse of your reset password request in our password manager app. please verify the given OTP\n\n $otp';
 
-    // Email it.
-    emailTransport
-        .send(envelope)
-        .then((envelope) => {
-              print('Email sent!'),
-              customsnackbar('Email sent successfully to your provided email'),
-            })
-        .catchError((e) => {
-              print('Error occurred: $e'),
-              customsnackbar('Error occurred while sending email. please try again'),
-            });
+      // Email it.
+      emailTransport
+          .send(envelope)
+          .then((envelope) => {
+                print('Email sent!'),
+                customsnackbar(
+                    'Email sent successfully check spam folder if not found in inbox'),
+              })
+          .catchError((e) => {
+                print('Error occurred: $e'),
+                customsnackbar(
+                    'Error occurred while sending email. please try again'),
+              });
+    }
   }
 
   Widget deleteccountdialogbox() {
     return AlertDialog(
       title: Center(
         child: Text(
-          'User Authentication',
+          'Verify Your Email',
           style: TextStyle(
             fontSize: 20.0,
             // color: Colors.white,
@@ -113,40 +243,39 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
       actions: [
-        // SizedBox(
-        //   width: MediaQuery.of(context).size.width * 0.85,
-        //   child:Form(
-        //     key: _emailkey,
-        //     child:  TextFormField(
-        //     controller: _emailcontroller,
-        //     autovalidateMode: AutovalidateMode.onUserInteraction,
-        //     validator: (val) => MatchValidator(
-        //             errorText: "email doesn't match with provided one")
-        //         .validateMatch(val, usersbox.get('user_email')),
-        //     decoration: InputDecoration(
-        //       labelText: 'Email',
-        //       border: OutlineInputBorder(
-        //         borderRadius: BorderRadius.circular(10.0),
-        //       ),
-        //     ),
-        //   ),
-        //   ),
-        // ),
-        Center(
-          child: Padding(padding: EdgeInsets.all(5.0),
-          child: 
-           TextButton(
-                  onPressed: () {
-                    sendOtp();
-                  },
-                  child: Text(
-                    "Send OTP",
-                    style: TextStyle(
-                      color: Colors.blueGrey,
-                      fontSize: 20.0,
-                    ),
-                  ),
+        SizedBox(
+          width: MediaQuery.of(context).size.width * 0.85,
+          child: Form(
+            key: _emailkey,
+            child: TextFormField(
+              controller: _emailcontroller,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              validator: (val) => MatchValidator(
+                      errorText: "email doesn't match with provided one")
+                  .validateMatch(val, usersbox.get('user_email')),
+              decoration: InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10.0),
                 ),
+              ),
+            ),
+          ),
+        ),
+        Center(
+          child: Padding(
+            padding: EdgeInsets.all(15.0),
+            child: TextButton(
+              onPressed: () {
+                sendOtp();
+              },
+              child: Text(
+                "Send OTP",
+                style: TextStyle(
+                  color: Colors.blueGrey,
+                ),
+              ),
+            ),
           ),
         ),
         SizedBox(
@@ -155,7 +284,6 @@ class _LoginScreenState extends State<LoginScreen> {
             controller: _otpcontroller,
             autovalidateMode: AutovalidateMode.onUserInteraction,
             validator: RequiredValidator(errorText: "OTP required"),
-            keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: 'OTP',
               border: OutlineInputBorder(
@@ -168,17 +296,17 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.all(10.0),
           child: Center(
             child: TextButton(
-                onPressed: () {
-                  verify();
-                },
-                child: Text(
-                  'Submit',
-                  style: TextStyle(
-                    fontSize: 20.0,
-                    color: Colors.blueGrey,
-                  ),
+              onPressed: () {
+                verify();
+              },
+              child: Text(
+                'Submit',
+                style: TextStyle(
+                  fontSize: 20.0,
+                  color: Colors.blueGrey,
                 ),
               ),
+            ),
           ),
         ),
       ],
@@ -363,32 +491,94 @@ class _LoginScreenState extends State<LoginScreen> {
                       Padding(
                         padding: const EdgeInsets.all(35.0),
                       ),
-                      Container(
-                        width: MediaQuery.of(context).size.width * 0.85,
-                        height: MediaQuery.of(context).size.height * 0.06,
-                        decoration: ShapeDecoration(
-                          shape: StadiumBorder(),
-                          gradient: FlutterGradients.warmFlame(
-                            tileMode: TileMode.clamp,
-                            type: GradientType.linear,
-                          ),
-                        ),
-                        child: MaterialButton(
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          shape: StadiumBorder(),
-                          onPressed: () => signing(
-                              enteredusername.text, enteredpassword.text),
-                          child: Text(
-                            'Sign In',
-                            style: TextStyle(
-                              fontSize: 20.0,
-                              // color: Colors.white,
+                      !_canCheckBiometrics
+                          ? Container(
+                              width: MediaQuery.of(context).size.width * 0.85,
+                              height:
+                                  MediaQuery.of(context).size.height * 0.065,
+                              decoration: ShapeDecoration(
+                                shape: StadiumBorder(),
+                                gradient: FlutterGradients.warmFlame(
+                                  tileMode: TileMode.clamp,
+                                  type: GradientType.linear,
+                                ),
+                              ),
+                              child: MaterialButton(
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                shape: StadiumBorder(),
+                                onPressed: () => signing(
+                                    enteredusername.text, enteredpassword.text),
+                                child: Text(
+                                  'Sign In',
+                                  style: TextStyle(
+                                    fontSize: 20.0,
+                                    // color: Colors.white,
+                                  ),
+                                ),
+                                hoverColor: Colors.black,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width:
+                                      MediaQuery.of(context).size.width * 0.65,
+                                  height: MediaQuery.of(context).size.height *
+                                      0.065,
+                                  margin: EdgeInsets.symmetric(horizontal: 7.0),
+                                  decoration: ShapeDecoration(
+                                    shape: StadiumBorder(),
+                                    gradient: FlutterGradients.warmFlame(
+                                      tileMode: TileMode.clamp,
+                                      type: GradientType.linear,
+                                    ),
+                                  ),
+                                  child: MaterialButton(
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    shape: StadiumBorder(),
+                                    onPressed: () => signing(
+                                        enteredusername.text,
+                                        enteredpassword.text),
+                                    child: Text(
+                                      'Sign In',
+                                      style: TextStyle(
+                                        fontSize: 20.0,
+                                        // color: Colors.white,
+                                      ),
+                                    ),
+                                    hoverColor: Colors.black,
+                                  ),
+                                ),
+                                Container(
+                                  width:
+                                      MediaQuery.of(context).size.width * 0.15,
+                                  height: MediaQuery.of(context).size.height *
+                                      0.075,
+                                  decoration: ShapeDecoration(
+                                    shape: StadiumBorder(),
+                                    // gradient: FlutterGradients.warmFlame(
+                                    //   tileMode: TileMode.clamp,
+                                    //   type: GradientType.linear,
+                                    // ),
+                                  ),
+                                  child: IconButton(
+                                    onPressed: () {
+                                      _authenticateWithBiometrics();
+                                    },
+                                    tooltip: "Fingerprint Login",
+                                    icon: Icon(
+                                      Icons.fingerprint_sharp,
+                                      color: Colors.black,
+                                      size: 45.0,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          hoverColor: Colors.black,
-                        ),
-                      ),
                     ],
                   ),
                 ),

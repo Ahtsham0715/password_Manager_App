@@ -1,13 +1,12 @@
 import 'dart:async';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:form_field_validator/form_field_validator.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_gradients/flutter_gradients.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:password_manager/loginscreen.dart';
 import 'package:flutter/services.dart';
-import 'package:icons_helper/icons_helper.dart';
+import 'package:encrypt/encrypt.dart' as encryption;
+import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
 class passwordspage extends StatefulWidget {
   final String currentuser;
@@ -22,63 +21,26 @@ class _passwordspageState extends State<passwordspage> {
 
   final _myformKey = GlobalKey<FormState>();
 
-  Widget custominfodialog() {
-    return AlertDialog(
-      actions: [
-        Text(
-          "Long press on Password Tile to delete it",
-          style: TextStyle(
-            fontSize: 20.0,
-            // color: Colors.white,
-          ),
-        ),
-        Center(
-          child: Container(
-            decoration: ShapeDecoration(
-              shape: StadiumBorder(),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.orangeAccent,
-                  Colors.redAccent,
-                ],
-              ),
-            ),
-            child: MaterialButton(
-              shape: StadiumBorder(),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              // color: Colors.redAccent,
-              child: Icon(
-                Icons.close,
-                color: Colors.white,
-                size: 25.0,
-              ),
-            ),
-          ),
-        )
-      ],
-    );
-  }
-
   @override
   void initState() {
     super.initState();
     box = Hive.box("passwords");
     users = Hive.box("users");
-    Timer.run(() {
-      showDialog(context: context, builder: (_) => custominfodialog());
-    });
   }
+
+  final enckey = encryption.Key.fromLength(32);
+  final iv = encryption.IV.fromLength(16);
+  var encrypter;
+
+  var encrypted;
+  var decrypted;
 
   TextEditingController password = new TextEditingController();
   TextEditingController appname = new TextEditingController();
 
   Widget deletepassword(dltappname) {
     return AlertDialog(
-      insetPadding: EdgeInsets.all(50.0),
+      insetPadding: EdgeInsets.all(45.0),
       actions: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -114,7 +76,7 @@ class _passwordspageState extends State<passwordspage> {
             ),
             Padding(
                 padding: EdgeInsets.symmetric(
-                    horizontal: MediaQuery.of(context).size.width * 0.1)),
+                    horizontal: MediaQuery.of(context).size.width * 0.065)),
             Container(
               decoration: ShapeDecoration(
                 shape: StadiumBorder(),
@@ -197,13 +159,16 @@ class _passwordspageState extends State<passwordspage> {
             ),
           ),
         ),
-        leading: Icon(
-          getIconUsingPrefix(name: "fa." + myappname),
-          size: 40.0,
+        leading: new Icon(
+          MdiIcons.fromString(myappname),
+          size: 42.0,
           color: Colors.white,
         ),
         trailing: IconButton(
           onPressed: () {
+            encrypter = encryption.Encrypter(encryption.AES(enckey));
+            decrypted =
+                encrypter.decrypt(encryption.Encrypted.from64(pass), iv: iv);
             Clipboard.setData(ClipboardData(text: pass)).then((value) {
               final snackBar = SnackBar(
                 content: Text(
@@ -383,7 +348,7 @@ class _passwordspageState extends State<passwordspage> {
                                 padding: EdgeInsets.symmetric(
                                     horizontal:
                                         MediaQuery.of(context).size.width *
-                                            0.12)),
+                                            0.09)),
                             Container(
                               decoration: ShapeDecoration(
                                 shape: StadiumBorder(),
@@ -525,7 +490,13 @@ class _passwordspageState extends State<passwordspage> {
                             child: MaterialButton(
                               onPressed: () {
                                 if (_myformKey.currentState.validate()) {
-                                  box.put(appname.text, password.text);
+                                  encrypter = encryption.Encrypter(
+                                      encryption.AES(enckey));
+                                  encrypted =
+                                      encrypter.encrypt(password.text, iv: iv);
+                                  print(encrypted.base64);
+                                  box.put(appname.text,
+                                      encrypted.base64.toString());
                                   Navigator.of(context).pop();
                                   appname.clear();
                                   password.clear();
@@ -557,7 +528,13 @@ class _passwordspageState extends State<passwordspage> {
                             child: MaterialButton(
                               onPressed: () {
                                 if (_myformKey.currentState.validate()) {
-                                  box.put(appname.text, password.text);
+                                  encrypter = encryption.Encrypter(
+                                      encryption.AES(enckey));
+                                  encrypted =
+                                      encrypter.encrypt(password.text, iv: iv);
+                                  print(encrypted.base64);
+                                  box.put(appname.text,
+                                      encrypted.base64.toString());
                                   appname.clear();
                                   password.clear();
                                   Navigator.pop(context);
@@ -627,6 +604,7 @@ class _passwordspageState extends State<passwordspage> {
               itemBuilder: (context, index) {
                 final key = passwords.keys.toList()[index];
                 final value = passwords.get(key);
+                // print(value);
                 return customwidget(key, value);
               },
               separatorBuilder: (_, index) => Divider(
