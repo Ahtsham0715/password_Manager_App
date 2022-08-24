@@ -18,27 +18,21 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 2.0.0+1
 
 environment:
-  sdk: ">=2.7.0 <3.0.0"
+  sdk: ">=2.12.0 <3.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
   font_awesome_flutter: any
-  path_provider: any
-  hive_flutter: any
-  hive: any
   flutter_gradients: any
   form_field_validator: any
-  icons_helper: any
-  crypto: any
-  mailer2: any
-  google_sign_in: any
   local_auth: any
   encrypt: any
-  material_design_icons_flutter: any
   firebase_core: any
   firebase_auth: any
   cloud_firestore: any
+  get: any
+  connectivity_plus: any
 
 
   # The following adds the Cupertino Icons font to your application.

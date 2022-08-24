@@ -4,17 +4,10 @@ import 'package:flutter/rendering.dart';
 import 'package:password_manager/firebase_options.dart';
 import 'package:password_manager/loginscreen.dart';
 import 'dart:async';
-import 'package:path_provider/path_provider.dart';
-import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_gradients/flutter_gradients.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  var document = await getApplicationDocumentsDirectory();
-  Hive.init(document.path);
-  await Hive.openBox("passwords");
-  await Hive.openBox("users");
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -47,8 +40,8 @@ class _FirstPageState extends State<FirstPage> {
     super.initState();
     Timer(
         Duration(seconds: 2),
-        () => Navigator.of(context).pushReplacement(MaterialPageRoute(
-            builder: (BuildContext context) => LoginScreen())));
+        (){}
+            );
   }
 
   @override
