@@ -237,13 +237,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_gradients:
-    dependency: "direct main"
-    description:
-      name: flutter_gradients
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "1.0.0+3"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -251,6 +244,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.10.0"
+  flutter_neumorphic:
+    dependency: "direct main"
+    description:
+      name: flutter_neumorphic
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.2.0"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:

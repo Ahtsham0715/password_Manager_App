@@ -24,7 +24,6 @@ dependencies:
   flutter:
     sdk: flutter
   font_awesome_flutter: any
-  flutter_gradients: any
   form_field_validator: any
   local_auth: any
   encrypt: any
@@ -33,6 +32,7 @@ dependencies:
   cloud_firestore: any
   get: any
   connectivity_plus: any
+  flutter_neumorphic: any
 
 
   # The following adds the Cupertino Icons font to your application.
